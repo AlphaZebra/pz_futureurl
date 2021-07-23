@@ -14,4 +14,8 @@ The format for this specialized link is:
 There are no spaces in the format. The date can be given in any format that the PHP strtotime() 
 function can read. 
 
+Installation: just copy the futureurl.php file to the wp-content/plugins directory of your WordPress installation. Then, when in the WordPress admin console, click the plugins option on the left margin to display all the plugins you've got loaded, then press "Activate" to, well, um, activate the plugin. 
+
+From that point forward, you can use the link format above to add future links to any content as you're editing it. 
+
 Questions? Hit me at robert () peakzebra.com
