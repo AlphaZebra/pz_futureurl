@@ -12,7 +12,13 @@ License URI:       https://www.gnu.org/licenses/gpl-2.0.html
 */
 // namespace FutureURL;
 
-add_filter( 'the_content', 'handle_future_urls' );
+add_filter( 'the_content', 'handle_future_urls', 1 );
+
+define( "PZ_LEN_START_TAG",     2);
+define( "PZ_START_TAG_OPEN",    "[[");
+define( "PZ_START_TAG_CLOSE",   "]]");
+define( "PZ_CLOSE_TAG",         "[[end]]");
+define( "PZ_URL_TOKEN",         "|");
  
 
 /**
@@ -37,15 +43,18 @@ add_filter( 'the_content', 'handle_future_urls' );
  */
 function handle_future_urls( $content ) {
 
+    if( is_admin()) return $content;
+
     // Check if we're inside the main loop in a single Post.
     if ( is_singular() && in_the_loop() && is_main_query() ) {
+        $content = esc_html( $content );
         while ( $full_string = pz_get_full_link_string( $content ) ) {
             $url = pz_get_link( $full_string );
             // at present, code only handles one instance of example.com, which is stupid
             if( stripos( $url, "example.com" )) {
-                $content = str_replace( "&lt;-" . $full_string . "->", "!!HOLD!!", $content );
-                $hold_string = "&lt;-" . $full_string . "->";
-                $content = str_replace_first( "&lt;->", "!!!!", $content );
+                $content = str_replace( PZ_START_TAG_OPEN . $full_string . PZ_START_TAG_CLOSE, "!!HOLD!!", $content );
+                $hold_string = PZ_START_TAG_OPEN . $full_string . PZ_START_TAG_CLOSE;
+                $content = str_replace_first( PZ_CLOSE_TAG, "!!!!", $content );
                 continue;
             }
             if( pz_time_ok( $full_string ) ) {
@@ -60,7 +69,8 @@ function handle_future_urls( $content ) {
             // text and won't be found anymore. 
         // if we swapped out an "example.com" example link for HOLD marker, now swap back
         $content = str_replace( "!!HOLD!!", $hold_string, $content );
-        $content = str_replace( "!!!!", "<->", $content );
+        $content = str_replace( "!!!!", PZ_CLOSE_TAG, $content );
+        $content = wp_specialchars_decode( $content ); // put html entities back as they should be
     }
     return $content;
 }
@@ -73,7 +83,7 @@ function pz_time_ok( $str ) {
     // off chance that this quirk is ever 'corrected', we're "restarting" strtok
     // and just discarding the first part of the string it returns. Chalk it up to
     // defensive programming. 
-    $date_str = strtok( $str, "-|"); // returns link, which we ignore.
+    $date_str = strtok( $str, PZ_URL_TOKEN); // returns link, which we ignore.
     $date_str = strtok( "" ); // returns remainder of string, which is the date
     $d = strtotime( $date_str ); // $d will be false if date format not readable
     $right_now = time();
@@ -86,13 +96,13 @@ function pz_get_full_link_string( $content ) {
 
     $tmpstr = "";
 
-    if ( $pos = stripos( $content, "&lt;-" ) ) {
+    if ( $pos = stripos( $content, PZ_START_TAG_OPEN ) ) {
         // get the full future link string
-        if( !$pos2 = stripos( $content, "->", $pos )) {
-            $pos2 = stripos( $content, "-&gt;");
+        if( !$pos2 = stripos( $content, PZ_START_TAG_CLOSE, $pos )) {
+            $pos2 = stripos( $content, PZ_START_TAG_CLOSE );
         }
         
-        $innerpos = $pos + 5;  // skip over first angle bracket
+        $innerpos = $pos + PZ_LEN_START_TAG;  // skip over first angle bracket
         // sanity check ... 
         if ( $pos2 < 0 ) {
             return "";
@@ -108,7 +118,7 @@ function pz_get_link( $str ) {
     // get the basic url part of the string, then the date
     $start_linkstr = strtok( $str, "-|" );
 
-    if( !stripos( $start_linkstr, "http://" ) ) {
+    if( stripos( $start_linkstr, "http://" ) === -1 ) {
         $linkstr = "http://" . $start_linkstr;
     } else {
         $linkstr = $start_linkstr;
@@ -126,10 +136,10 @@ function pz_do_url_write( $full_string, $url, $content ) {
         $replacer = "";
     }
 
-    $phrase = "&lt;-" . $full_string . "-&gt;"; // original special tag to look for
+    $phrase = PZ_START_TAG_OPEN . $full_string . PZ_START_TAG_CLOSE; // original special tag to look for
     $content = str_replace_first( $phrase, $replacer, $content );
     // now delete end marker or change to proper html tag close
-    $content = str_replace_first( "&lt;-&gt;", $replacer ? "</a>" : "", $content );
+    $content = str_replace_first( PZ_CLOSE_TAG, $replacer ? "</a>" : "", $content );
     return $content;
 }
 
