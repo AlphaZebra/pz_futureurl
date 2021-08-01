@@ -10,9 +10,9 @@ Author URI: http://www.peakzebra.com
 License:           GPL v2 or later
 License URI:       https://www.gnu.org/licenses/gpl-2.0.html
 */
-namespace FutureURL;
+// namespace FutureURL;
 
-add_filter( 'the_content', 'handle_future_urls', 1 );
+add_filter( 'the_content', 'handle_future_urls' );
  
 
 /**
@@ -41,6 +41,13 @@ function handle_future_urls( $content ) {
     if ( is_singular() && in_the_loop() && is_main_query() ) {
         while ( $full_string = pz_get_full_link_string( $content ) ) {
             $url = pz_get_link( $full_string );
+            // at present, code only handles one instance of example.com, which is stupid
+            if( stripos( $url, "example.com" )) {
+                $content = str_replace( "&lt;-" . $full_string . "->", "!!HOLD!!", $content );
+                $hold_string = "&lt;-" . $full_string . "->";
+                $content = str_replace_first( "&lt;->", "!!!!", $content );
+                continue;
+            }
             if( pz_time_ok( $full_string ) ) {
                 // ok to stick in live url
                 $content = pz_do_url_write( $full_string, $url, $content );
@@ -49,8 +56,11 @@ function handle_future_urls( $content ) {
                 $content = pz_do_url_write( $full_string, "", $content );
             }
         } // end while
-    // we can loop back to look for next one because the one we just handled has changed
-    // text and won't be found anymore. 
+            // we can loop back to look for next one because the one we just handled has changed
+            // text and won't be found anymore. 
+        // if we swapped out an "example.com" example link for HOLD marker, now swap back
+        $content = str_replace( "!!HOLD!!", $hold_string, $content );
+        $content = str_replace( "!!!!", "<->", $content );
     }
     return $content;
 }
@@ -78,7 +88,9 @@ function pz_get_full_link_string( $content ) {
 
     if ( $pos = stripos( $content, "&lt;-" ) ) {
         // get the full future link string
-        $pos2 = stripos( $content, "->", $pos );
+        if( !$pos2 = stripos( $content, "->", $pos )) {
+            $pos2 = stripos( $content, "-&gt;");
+        }
         
         $innerpos = $pos + 5;  // skip over first angle bracket
         // sanity check ... 
@@ -114,10 +126,10 @@ function pz_do_url_write( $full_string, $url, $content ) {
         $replacer = "";
     }
 
-    $phrase = "&lt;-" . $full_string . "->"; // original special tag to look for
+    $phrase = "&lt;-" . $full_string . "-&gt;"; // original special tag to look for
     $content = str_replace_first( $phrase, $replacer, $content );
     // now delete end marker or change to proper html tag close
-    $content = str_replace_first( "&lt;->", $replacer ? "</a>" : "", $content );
+    $content = str_replace_first( "&lt;-&gt;", $replacer ? "</a>" : "", $content );
     return $content;
 }
 
