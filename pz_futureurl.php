@@ -5,14 +5,17 @@ Plugin Name: FutureURL
 Plugin URI: http://www.peakzebra.com
 Description: Allows you to create links that don't appear until after a date or after target exists.
 Author: Robert Richardson / PeakZebra
-Version: 0.0.1
+Version: 0.0.2
 Author URI: http://www.peakzebra.com
 License:           GPL v2 or later
 License URI:       https://www.gnu.org/licenses/gpl-2.0.html
 */
-// namespace FutureURL;
+
 
 add_filter( 'the_content', 'handle_future_urls', 1 );
+
+// if set true, debug logging will appear at the end of the content on the page
+define ( "PZ_DEBUG",            false );
 
 define( "PZ_LEN_START_TAG",     2);
 define( "PZ_START_TAG_OPEN",    "[[");
@@ -43,18 +46,64 @@ define( "PZ_URL_TOKEN",         "|");
  */
 function handle_future_urls( $content ) {
 
-    if( is_admin()) return $content;
+    if( is_admin()) {
+        return $content;
+    }
+
+     // bail right now if there's no futureURL markup -- saves time
+     if( !stripos( $content, "[[end]]" )) {
+        return $content;
+    }
+
+    // debug 
+    if( PZ_DEBUG ) {
+        pz_log_msg( "Start");
+    }
+    
 
     // Check if we're inside the main loop in a single Post.
     if ( is_singular() && in_the_loop() && is_main_query() ) {
+
+       
         $content = esc_html( $content );
+
+        // counter is just to stop the while loop if it gets stuck in a loop 
+        // for whatever stupid, unanticipated reason
+        $count = 0; 
         while ( $full_string = pz_get_full_link_string( $content ) ) {
+
+            if( PZ_DEBUG ) {
+                pz_log_msg( "full string is " . $full_string );
+            }
+            
+            $count = $count+1; 
+            if( $count > 10 ) {
+                $content = $content . pz_log_msg( " count greater than 10");
+                return $content;
+                break;
+            }
             $url = pz_get_link( $full_string );
+
+            if( PZ_DEBUG ) {
+                pz_log_msg( "url is " . $url );
+            }
+
             // at present, code only handles one instance of example.com, which is stupid
             if( stripos( $url, "example.com" )) {
                 $content = str_replace( PZ_START_TAG_OPEN . $full_string . PZ_START_TAG_CLOSE, "!!HOLD!!", $content );
                 $hold_string = PZ_START_TAG_OPEN . $full_string . PZ_START_TAG_CLOSE;
-                $content = str_replace_first( PZ_CLOSE_TAG, "!!!!", $content );
+                
+                if( PZ_DEBUG ) {
+                    pz_log_msg( "Hold_string is " . $hold_string );
+                }
+
+                $pos = stripos( $content, PZ_CLOSE_TAG );
+                if( $pos ) {
+                    $content = substr_replace( $content, "!!end!!", $pos, 7);
+                }
+                if( PZ_DEBUG ) {
+                    pz_log_msg( "end replaced");
+                }
                 continue;
             }
             if( pz_time_ok( $full_string ) ) {
@@ -69,9 +118,14 @@ function handle_future_urls( $content ) {
             // text and won't be found anymore. 
         // if we swapped out an "example.com" example link for HOLD marker, now swap back
         $content = str_replace( "!!HOLD!!", $hold_string, $content );
-        $content = str_replace( "!!!!", PZ_CLOSE_TAG, $content );
+        $content = str_replace( "!!end!!", PZ_CLOSE_TAG, $content );
         $content = wp_specialchars_decode( $content ); // put html entities back as they should be
     }
+    // add log messages
+    if( PZ_DEBUG ) {
+        $content = $content . pz_log_msg( "END");
+    }
+
     return $content;
 }
 
@@ -83,10 +137,16 @@ function pz_time_ok( $str ) {
     // off chance that this quirk is ever 'corrected', we're "restarting" strtok
     // and just discarding the first part of the string it returns. Chalk it up to
     // defensive programming. 
+
     $date_str = strtok( $str, PZ_URL_TOKEN); // returns link, which we ignore.
     $date_str = strtok( "" ); // returns remainder of string, which is the date
     $d = strtotime( $date_str ); // $d will be false if date format not readable
     $right_now = time();
+
+    if( PZ_DEBUG ) {
+        pz_log_msg( "Link time = $d and Right now = " . $right_now );
+    }
+
     if ( !$d ) return false;
     else return  $d <= $right_now;
 }
@@ -135,12 +195,31 @@ function pz_do_url_write( $full_string, $url, $content ) {
     } else { 
         $replacer = "";
     }
+    if( PZ_DEBUG ) {
+        pz_log_msg( "Replacer is " . $replacer );
+    }
 
     $phrase = PZ_START_TAG_OPEN . $full_string . PZ_START_TAG_CLOSE; // original special tag to look for
-    $content = str_replace_first( $phrase, $replacer, $content );
+    $pos = stripos( $content, $phrase );
+    if( $pos ) {
+        $content = substr_replace( $content, $replacer, $pos, strlen( $phrase )  );
+    }
+    if( $replacer ) {
+        $replacer = "</a>";
+    }
+    $pos = stripos( $content, PZ_CLOSE_TAG );
+    if( $pos ) {
+        $content = substr_replace( $content, $replacer, $pos, strlen( PZ_CLOSE_TAG ));
+    }
+    // $content = str_replace_first( $phrase, $replacer, $content );
     // now delete end marker or change to proper html tag close
-    $content = str_replace_first( PZ_CLOSE_TAG, $replacer ? "</a>" : "", $content );
+    // $content = str_replace_first( PZ_CLOSE_TAG, $replacer ? "</a>" : "", $content );
     return $content;
 }
 
+function pz_log_msg( $msg ) {
+    static $log_string = '<p>DEBUG LOG: </p>';
 
+    $log_string = $log_string . $msg . "<br>";
+    return $log_string;
+}
