@@ -5,7 +5,7 @@ Plugin Name: FutureURL
 Plugin URI: http://www.peakzebra.com
 Description: Allows you to create links that don't appear until after a date or after target exists.
 Author: Robert Richardson / PeakZebra
-Version: 0.0.2
+Version: 0.0.3
 Author URI: http://www.peakzebra.com
 License:           GPL v2 or later
 License URI:       https://www.gnu.org/licenses/gpl-2.0.html
@@ -28,8 +28,10 @@ define( "PZ_URL_TOKEN",         "|");
  * This function is called as the main content of a page is being prepared for display. If the
  * content contains hyperlinks in a special format, each of these links will be evaluated to see 
  * if the current date is later than a 'golive' date embedded in the link. For each special link, 
- * if it's currently after the golive date, the link is rewritten as a standard html link. 
- * If it's currently before the golive date, the link is stripped down to just the anchor text
+ * if it's currently after the golive date, the link is rewritten (on the page being served) 
+ * as a standard html link. 
+ * If the time the page is being requested is currently before the golive date, the link is 
+ * stripped down to just the anchor text
  * (in other words, there's no link there, just the text). 
  * 
  * This enables you to place links in a post that you don't want to go live immediately. You 
@@ -39,7 +41,7 @@ define( "PZ_URL_TOKEN",         "|");
  * 
  * The format for this specialized link is:
  * 
- * <-thelink.com/whatever|July 1, 2022->the anchor text<->
+ * [[thelink.com/whatever|July 1, 2022]]the anchor text[[end]]
  * 
  * There are no spaces in the format. The date can be given in any format that the PHP 
  * strtotime() function can read. 
@@ -64,12 +66,13 @@ function handle_future_urls( $content ) {
     // Check if we're inside the main loop in a single Post.
     if ( is_singular() && in_the_loop() && is_main_query() ) {
 
-       
+        
         $content = esc_html( $content );
 
         // counter is just to stop the while loop if it gets stuck in a loop 
         // for whatever stupid, unanticipated reason
         $count = 0; 
+
         while ( $full_string = pz_get_full_link_string( $content ) ) {
 
             if( PZ_DEBUG ) {
@@ -121,7 +124,7 @@ function handle_future_urls( $content ) {
         $content = str_replace( "!!end!!", PZ_CLOSE_TAG, $content );
         $content = wp_specialchars_decode( $content ); // put html entities back as they should be
     }
-    // add log messages
+    // add log messages if debugging
     if( PZ_DEBUG ) {
         $content = $content . pz_log_msg( "END");
     }
@@ -129,7 +132,7 @@ function handle_future_urls( $content ) {
     return $content;
 }
 
-// true if we're now past the golive date, otherwise false
+// returns true if we're now past the golive date, otherwise false
 function pz_time_ok( $str ) {
     // a quirk of strtok is that we could just call it with an empty string as
     // a parameter and it would return the remainder of the string, because it stays
@@ -211,11 +214,12 @@ function pz_do_url_write( $full_string, $url, $content ) {
     if( $pos ) {
         $content = substr_replace( $content, $replacer, $pos, strlen( PZ_CLOSE_TAG ));
     }
-    // $content = str_replace_first( $phrase, $replacer, $content );
-    // now delete end marker or change to proper html tag close
-    // $content = str_replace_first( PZ_CLOSE_TAG, $replacer ? "</a>" : "", $content );
     return $content;
 }
+
+// tacks some tracking messaging to the end of current page if we're debugging
+// returns the $log_string, but this is ignored until the last call, when the 
+// string can be added to the page $content
 
 function pz_log_msg( $msg ) {
     static $log_string = '<p>DEBUG LOG: </p>';
